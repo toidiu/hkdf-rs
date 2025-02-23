@@ -1,18 +1,33 @@
+use aws_lc_rs::hkdf;
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::hmac;
 
-const ALGO: hmac::Algorithm = hmac::HMAC_SHA256;
+const ALGO_HMAC: hmac::Algorithm = hmac::HMAC_SHA256;
+const ALGO_HKDF: hkdf::Algorithm = hkdf::HKDF_SHA256;
 
 fn main() {
-    println!("Hello, world!");
+    println!("generating keys of len {}", ALGO_HKDF.len());
 
-    let ikm = Ikm { data: vec![1, 2] };
-    let info = "Test";
-    let len = 10;
+    let ikm = Ikm {
+        data: b"secret input keying material".to_vec(),
+    };
+    let info = b"implement hkdf from scratch using hmac!!";
     let salt = vec![];
 
     let prk = extract(&salt, &ikm);
-    let _okm = expand(&prk, info, len);
+    let okm = expand(&prk, info, ALGO_HMAC.len());
+    println!("{:?}", okm.data.as_slice());
+
+    // awslc hkdf
+    let salt = hkdf::Salt::new(ALGO_HKDF, &salt);
+    let pseudo_random_key = salt.extract(&ikm.data);
+    let i: &[&[u8]] = &[info];
+    let awslc_okm = pseudo_random_key.expand(i, ALGO_HKDF).unwrap();
+    let mut out = vec![0; ALGO_HKDF.len()];
+    awslc_okm.fill(&mut out).unwrap();
+    println!("{:?}", out);
+
+    assert_eq!(okm.data, out);
 }
 
 struct Ikm {
@@ -40,7 +55,7 @@ struct Okm {
 // The output PRK is calculated as follows:
 //   PRK = HMAC-Hash(salt, IKM)/
 fn extract(salt: &[u8], ikm: &Ikm) -> Prk {
-    let key = hmac::Key::new(ALGO, salt);
+    let key = hmac::Key::new(ALGO_HMAC, salt);
     let data = hmac::sign(&key, &ikm.data);
     Prk { data }
 }
@@ -74,22 +89,26 @@ fn extract(salt: &[u8], ikm: &Ikm) -> Prk {
 //    ...
 //
 // (where the constant concatenated to the end of each T(n) is a single octet.)
-fn expand(prk: &Prk, info: &str, len: usize) -> Okm {
+fn expand(prk: &Prk, info: &[u8], len: usize) -> Okm {
     let mut okm: Vec<u8> = Vec::new();
 
-    let n: u64 = (len as f64 / ALGO.len() as f64).ceil() as u64;
+    let n: u64 = (len as f64 / ALGO_HMAC.len() as f64).ceil() as u64;
     assert!(n < u8::MAX.into());
     let n = n as u8;
 
+    // T(0) = empty string (zero length)
     let mut prev_t: Vec<u8> = vec![];
     for i in 1..=n {
-        let hmac_data = [&prev_t, info.as_bytes(), &[i]].concat();
-        let key = hmac::Key::new(ALGO, prk.data.as_ref());
+        let hmac_data = [&prev_t, info, &[i]].concat();
+        let key = hmac::Key::new(ALGO_HMAC, prk.data.as_ref());
         let t = hmac::sign(&key, &hmac_data);
         prev_t = t.as_ref().to_vec();
 
         okm.extend(t.as_ref());
     }
 
+    // truncate to len bytes
+    okm = okm.into_iter().take(len).collect();
+    assert_eq!(okm.len(), len);
     Okm { data: okm }
 }
