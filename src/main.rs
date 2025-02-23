@@ -7,12 +7,24 @@ fn main() {
     println!("Hello, world!");
 
     let ikm = Ikm { data: vec![1, 2] };
-    let info = "Test".to_string();
+    let info = "Test";
     let len = 10;
     let salt = vec![];
 
-    let prk = extract(salt, ikm);
-    let _okm = expand(prk, info, len);
+    let prk = extract(&salt, &ikm);
+    let _okm = expand(&prk, info, len);
+}
+
+struct Ikm {
+    data: Vec<u8>,
+}
+
+struct Prk {
+    data: hmac::Tag,
+}
+
+struct Okm {
+    data: Vec<u8>,
 }
 
 // HKDF-Extract(salt, IKM) -> PRK
@@ -27,8 +39,8 @@ fn main() {
 //
 // The output PRK is calculated as follows:
 //   PRK = HMAC-Hash(salt, IKM)/
-fn extract(salt: Vec<u8>, ikm: Ikm) -> Prk {
-    let key = hmac::Key::new(ALGO, &salt);
+fn extract(salt: &[u8], ikm: &Ikm) -> Prk {
+    let key = hmac::Key::new(ALGO, salt);
     let data = hmac::sign(&key, &ikm.data);
     Prk { data }
 }
@@ -62,7 +74,7 @@ fn extract(salt: Vec<u8>, ikm: Ikm) -> Prk {
 //    ...
 //
 // (where the constant concatenated to the end of each T(n) is a single octet.)
-fn expand(prk: Prk, info: String, len: usize) -> Okm {
+fn expand(prk: &Prk, info: &str, len: usize) -> Okm {
     let mut okm: Vec<u8> = Vec::new();
 
     let n: u64 = (len as f64 / ALGO.len() as f64).ceil() as u64;
@@ -80,16 +92,4 @@ fn expand(prk: Prk, info: String, len: usize) -> Okm {
     }
 
     Okm { data: okm }
-}
-
-struct Ikm {
-    data: Vec<u8>,
-}
-
-struct Prk {
-    data: hmac::Tag,
-}
-
-struct Okm {
-    data: Vec<u8>,
 }
