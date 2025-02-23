@@ -2,7 +2,9 @@ use aws_lc_rs::hkdf;
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::hmac;
 
+// hmac specific SHA256 algo.
 const ALGO_HMAC: hmac::Algorithm = hmac::HMAC_SHA256;
+// hkdf specific SHA256 algo.
 const ALGO_HKDF: hkdf::Algorithm = hkdf::HKDF_SHA256;
 
 fn main() {
@@ -14,20 +16,30 @@ fn main() {
     let info = b"implement hkdf from scratch using hmac!!";
     let salt = vec![];
 
-    let prk = extract(&salt, &ikm);
-    let okm = expand(&prk, info, ALGO_HMAC.len());
-    println!("{:?}", okm.data.as_slice());
+    // custom implementation
+    let custom_okm = {
+        let prk = extract(&salt, &ikm);
+        let okm = expand(&prk, info, ALGO_HMAC.len());
+        println!("{:?}", okm.data.as_slice());
+        okm
+    };
 
     // awslc hkdf
-    let salt = hkdf::Salt::new(ALGO_HKDF, &salt);
-    let pseudo_random_key = salt.extract(&ikm.data);
-    let i: &[&[u8]] = &[info];
-    let awslc_okm = pseudo_random_key.expand(i, ALGO_HKDF).unwrap();
-    let mut out = vec![0; ALGO_HKDF.len()];
-    awslc_okm.fill(&mut out).unwrap();
-    println!("{:?}", out);
+    // https://docs.rs/aws-lc-rs/latest/aws_lc_rs/hkdf/index.html
+    let awslc_okm = {
+        let salt = hkdf::Salt::new(ALGO_HKDF, &salt);
+        let pseudo_random_key = salt.extract(&ikm.data);
+        // this is annoying. why does awslc take a nested array?
+        let temp_info: &[&[u8]] = &[info];
+        let awslc_okm = pseudo_random_key.expand(temp_info, ALGO_HKDF).unwrap();
 
-    assert_eq!(okm.data, out);
+        let mut out = vec![0; ALGO_HKDF.len()];
+        awslc_okm.fill(&mut out).unwrap();
+        println!("{:?}", out);
+        out
+    };
+
+    assert_eq!(custom_okm.data, awslc_okm);
 }
 
 struct Ikm {
