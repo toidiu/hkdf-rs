@@ -2,9 +2,9 @@ use aws_lc_rs::hkdf;
 use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::hmac;
 
-// hmac specific SHA256 algo.
+// HMAC specific SHA256 algo.
 const ALGO_HMAC: hmac::Algorithm = hmac::HMAC_SHA256;
-// hkdf specific SHA256 algo.
+// HKDF specific SHA256 algo.
 const ALGO_HKDF: hkdf::Algorithm = hkdf::HKDF_SHA256;
 
 fn main() {
